@@ -460,6 +460,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     LOG_ERR("EHP", "Failed to create new page");
                     return;
                   }
+                  self->currentPage->firstWordOffset = self->runningWordCount;
                   self->currentPageNextY = 0;
                 } else if (!self->currentPage) {
                   self->currentPage.reset(new Page());
@@ -467,6 +468,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     LOG_ERR("EHP", "Failed to create initial page");
                     return;
                   }
+                  self->currentPage->firstWordOffset = self->runningWordCount;
                   self->currentPageNextY = 0;
                 }
 
@@ -1133,6 +1135,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   if (!currentPage) {
     currentPage.reset(new Page());
+    currentPage->firstWordOffset = runningWordCount;
     currentPageNextY = 0;
   }
 
@@ -1140,6 +1143,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     currentPage.reset(new Page());
+    currentPage->firstWordOffset = runningWordCount;
     currentPageNextY = 0;
   }
 
@@ -1156,6 +1160,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int16_t xOffset = line->getBlockStyle().leftInset();
   currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
   currentPageNextY += lineHeight;
+  runningWordCount += line->wordCount();
 }
 
 void ChapterHtmlSlimParser::makePages() {
@@ -1166,6 +1171,7 @@ void ChapterHtmlSlimParser::makePages() {
 
   if (!currentPage) {
     currentPage.reset(new Page());
+    currentPage->firstWordOffset = runningWordCount;
     currentPageNextY = 0;
   }
 

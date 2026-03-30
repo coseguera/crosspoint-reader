@@ -72,6 +72,10 @@ class ChapterHtmlSlimParser {
   int tableRowIndex = 0;
   int tableColIndex = 0;
 
+  // Running word count across all lines added so far; stamped onto each new Page
+  // as firstWordOffset so highlights can be resolved after layout changes.
+  uint32_t runningWordCount = 0;
+
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;

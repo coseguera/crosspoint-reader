@@ -1,6 +1,7 @@
 #pragma once
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/HighlightStore.h>
 #include <Epub/Section.h>
 
 #include <optional>
@@ -32,6 +33,18 @@ class EpubReaderActivity final : public Activity {
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
 
+  // Highlight mode
+  enum class HighlightMode { NONE, CURSOR, SELECTING };
+  HighlightMode highlightMode = HighlightMode::NONE;
+  int hlCursorLine = 0;  // current cursor position (0-based, counting only TAG_PageLine elements)
+  int hlStartLine = 0;   // start line when SELECTING
+  int hlLineCnt = 0;     // total line count on the current page (updated each render)
+  // Word offsets from chapter start for each line on the current page, plus one
+  // sentinel entry so hlLineWordOffsets[li+1] gives the exclusive end of line li.
+  // Populated by renderHighlightOverlay; used when saving highlights.
+  std::vector<uint32_t> hlLineWordOffsets;
+  std::unique_ptr<HighlightStore> highlightStore;
+
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
@@ -44,6 +57,7 @@ class EpubReaderActivity final : public Activity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
+  void renderHighlightOverlay(const Page& page, int marginLeft, int marginTop, int marginRight);
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);

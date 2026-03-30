@@ -57,6 +57,10 @@ class PageImage final : public PageElement {
 
 class Page {
  public:
+  // Word count from the start of the spine item to the first word on this page.
+  // Stable across layout changes; used to resolve highlight word-offset ranges.
+  uint32_t firstWordOffset = 0;
+
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
   std::vector<FootnoteEntry> footnotes;
