@@ -132,14 +132,16 @@ void EpubReaderActivity::loop() {
       requestUpdate();
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+        mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
       if (hlCursorLine > 0) {
         hlCursorLine--;
         requestUpdate();
       }
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+        mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
       if (hlLineCnt > 0 && hlCursorLine < hlLineCnt - 1) {
         hlCursorLine++;
         requestUpdate();
