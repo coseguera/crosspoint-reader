@@ -153,8 +153,7 @@ void EpubReaderActivity::loop() {
         requestUpdate();
       } else {
         // SELECTING: save highlight using stable word offsets and exit mode
-        if (highlightStore && hlLineCnt > 0 &&
-            static_cast<int>(hlLineWordOffsets.size()) >= hlLineCnt + 1) {
+        if (highlightStore && hlLineCnt > 0 && static_cast<int>(hlLineWordOffsets.size()) >= hlLineCnt + 1) {
           const int startLine = std::min(hlStartLine, hlCursorLine);
           const int endLine = std::max(hlStartLine, hlCursorLine);
           const int clampedStart = std::min(startLine, hlLineCnt - 1);
@@ -954,10 +953,10 @@ void EpubReaderActivity::renderHighlightOverlay(const Page& page, const int marg
     for (int li = 0; li < hlLineCnt; li++) {
       const uint32_t lineStart = hlLineWordOffsets[li];
       const uint32_t lineEnd = hlLineWordOffsets[li + 1];
-      const bool isHighlighted = std::any_of(spineHighlights.begin(), spineHighlights.end(),
-                                              [lineStart, lineEnd](const Highlight* h) {
-                                                return lineStart < h->endWordOffset && lineEnd > h->startWordOffset;
-                                              });
+      const bool isHighlighted =
+          std::any_of(spineHighlights.begin(), spineHighlights.end(), [lineStart, lineEnd](const Highlight* h) {
+            return lineStart < h->endWordOffset && lineEnd > h->startWordOffset;
+          });
       if (isHighlighted) {
         const int y = page.elements[lineIndices[li]]->yPos + marginTop;
         renderer.fillRect(marginLeft, y, 3, lineHeight, true);
