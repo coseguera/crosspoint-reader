@@ -954,12 +954,13 @@ void EpubReaderActivity::renderHighlightOverlay(const Page& page, const int marg
     for (int li = 0; li < hlLineCnt; li++) {
       const uint32_t lineStart = hlLineWordOffsets[li];
       const uint32_t lineEnd = hlLineWordOffsets[li + 1];
-      for (const auto* h : spineHighlights) {
-        if (lineStart < h->endWordOffset && lineEnd > h->startWordOffset) {
-          const int y = page.elements[lineIndices[li]]->yPos + marginTop;
-          renderer.fillRect(marginLeft, y, 3, lineHeight, true);
-          break;
-        }
+      const bool isHighlighted = std::any_of(spineHighlights.begin(), spineHighlights.end(),
+                                              [lineStart, lineEnd](const Highlight* h) {
+                                                return lineStart < h->endWordOffset && lineEnd > h->startWordOffset;
+                                              });
+      if (isHighlighted) {
+        const int y = page.elements[lineIndices[li]]->yPos + marginTop;
+        renderer.fillRect(marginLeft, y, 3, lineHeight, true);
       }
     }
   }
