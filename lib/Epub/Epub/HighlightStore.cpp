@@ -80,6 +80,40 @@ void HighlightStore::addHighlight(const Highlight& h) {
   highlights.push_back(h);
 }
 
+const Highlight* HighlightStore::findNextHighlight(const uint16_t currentSpineIndex,
+                                                    const uint32_t pageWordEnd) const {
+  const Highlight* best = nullptr;
+  for (const auto& h : highlights) {
+    const bool isAfter = (h.spineIndex > currentSpineIndex) ||
+                         (h.spineIndex == currentSpineIndex && h.startWordOffset >= pageWordEnd);
+    if (!isAfter) {
+      continue;
+    }
+    if (best == nullptr || h.spineIndex < best->spineIndex ||
+        (h.spineIndex == best->spineIndex && h.startWordOffset < best->startWordOffset)) {
+      best = &h;
+    }
+  }
+  return best;
+}
+
+const Highlight* HighlightStore::findPrevHighlight(const uint16_t currentSpineIndex,
+                                                    const uint32_t pageWordStart) const {
+  const Highlight* best = nullptr;
+  for (const auto& h : highlights) {
+    const bool isBefore = (h.spineIndex < currentSpineIndex) ||
+                          (h.spineIndex == currentSpineIndex && h.endWordOffset <= pageWordStart);
+    if (!isBefore) {
+      continue;
+    }
+    if (best == nullptr || h.spineIndex > best->spineIndex ||
+        (h.spineIndex == best->spineIndex && h.startWordOffset > best->startWordOffset)) {
+      best = &h;
+    }
+  }
+  return best;
+}
+
 std::vector<const Highlight*> HighlightStore::getSpineHighlights(const uint16_t spineIndex) const {
   std::vector<const Highlight*> result;
   for (const auto& h : highlights) {

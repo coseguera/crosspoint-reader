@@ -316,6 +316,47 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   return page;
 }
 
+std::optional<uint16_t> Section::getPageForWordOffset(uint32_t wordOffset) const {
+  if (pageCount == 0) {
+    return std::nullopt;
+  }
+  FsFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  // Read LUT offset from header (first of four trailing uint32_t offsets:
+  // lutOffset, anchorMapOffset, paragraphLutOffset, liLutFileOffset)
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  uint32_t lutOffset;
+  serialization::readPod(f, lutOffset);
+
+  // Binary search: find last page i where firstWordOffset[i] <= wordOffset
+  int lo = 0;
+  int hi = static_cast<int>(pageCount) - 1;
+  uint16_t result = 0;
+
+  while (lo <= hi) {
+    const int mid = lo + (hi - lo) / 2;
+    f.seek(lutOffset + sizeof(uint32_t) * mid);
+    uint32_t pagePos;
+    serialization::readPod(f, pagePos);
+    f.seek(pagePos);
+    uint32_t fwo;
+    serialization::readPod(f, fwo);  // firstWordOffset is serialized first in Page
+
+    if (fwo <= wordOffset) {
+      result = static_cast<uint16_t>(mid);
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  f.close();
+  return result;
+}
+
 std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) const {
   FsFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {

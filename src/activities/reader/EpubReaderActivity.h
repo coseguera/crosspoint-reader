@@ -28,6 +28,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingPercentJump = false;
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
+  // Signals that the next render should reposition to the page containing pendingHighlightWordOffset.
+  bool pendingHighlightJump = false;
+  uint32_t pendingHighlightWordOffset = 0;
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit

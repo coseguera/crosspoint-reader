@@ -52,4 +52,7 @@ class Section {
 
   // Look up the synthetic paragraph index for the given rendered page.
   std::optional<uint16_t> getParagraphIndexForPage(uint16_t page) const;
+
+  // Find the last page whose firstWordOffset <= wordOffset (binary search over LUT).
+  std::optional<uint16_t> getPageForWordOffset(uint32_t wordOffset) const;
 };

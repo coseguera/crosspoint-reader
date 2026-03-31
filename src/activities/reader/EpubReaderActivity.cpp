@@ -210,6 +210,8 @@ void EpubReaderActivity::loop() {
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     bool hasPageHighlights = false;
+    bool hasNextHighlight = false;
+    bool hasPrevHighlight = false;
     if (highlightStore && hlLineWordOffsets.size() >= 2) {
       const uint32_t pageWordStart = hlLineWordOffsets.front();
       const uint32_t pageWordEnd = hlLineWordOffsets.back();
@@ -218,10 +220,15 @@ void EpubReaderActivity::loop() {
                                       [pageWordStart, pageWordEnd](const Highlight* h) {
                                         return h->startWordOffset < pageWordEnd && h->endWordOffset > pageWordStart;
                                       });
+      hasNextHighlight =
+          highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd) != nullptr;
+      hasPrevHighlight =
+          highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart) != nullptr;
     }
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty(), hasPageHighlights),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), hasPageHighlights,
+                               hasNextHighlight, hasPrevHighlight),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -413,6 +420,52 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                              hlLineWordOffsets.back());
         highlightStore->save();
         requestUpdate();
+      }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::NEXT_HIGHLIGHT: {
+      if (highlightStore && hlLineWordOffsets.size() >= 2) {
+        const uint32_t pageWordEnd = hlLineWordOffsets.back();
+        const Highlight* h =
+            highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd);
+        if (h) {
+          if (h->spineIndex == static_cast<uint16_t>(currentSpineIndex) && section) {
+            if (const auto page = section->getPageForWordOffset(h->startWordOffset)) {
+              section->currentPage = *page;
+              requestUpdate();
+            }
+          } else {
+            RenderLock lock(*this);
+            currentSpineIndex = h->spineIndex;
+            nextPageNumber = 0;
+            pendingHighlightWordOffset = h->startWordOffset;
+            pendingHighlightJump = true;
+            section.reset();
+          }
+        }
+      }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::PREV_HIGHLIGHT: {
+      if (highlightStore && hlLineWordOffsets.size() >= 2) {
+        const uint32_t pageWordStart = hlLineWordOffsets.front();
+        const Highlight* h =
+            highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart);
+        if (h) {
+          if (h->spineIndex == static_cast<uint16_t>(currentSpineIndex) && section) {
+            if (const auto page = section->getPageForWordOffset(h->startWordOffset)) {
+              section->currentPage = *page;
+              requestUpdate();
+            }
+          } else {
+            RenderLock lock(*this);
+            currentSpineIndex = h->spineIndex;
+            nextPageNumber = 0;
+            pendingHighlightWordOffset = h->startWordOffset;
+            pendingHighlightJump = true;
+            section.reset();
+          }
+        }
       }
       break;
     }
@@ -755,6 +808,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
       section->currentPage = newPage;
       pendingPercentJump = false;
+    }
+
+    if (pendingHighlightJump) {
+      if (const auto page = section->getPageForWordOffset(pendingHighlightWordOffset)) {
+        section->currentPage = *page;
+      }
+      pendingHighlightJump = false;
     }
   }
 
