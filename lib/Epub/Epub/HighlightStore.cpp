@@ -61,6 +61,17 @@ void HighlightStore::save() const {
   LOG_DBG("HLS", "Saved %u highlights", static_cast<unsigned>(count));
 }
 
+void HighlightStore::removePageHighlights(const uint16_t spineIndex, const uint32_t pageWordStart,
+                                          const uint32_t pageWordEnd) {
+  highlights.erase(
+      std::remove_if(highlights.begin(), highlights.end(),
+                     [spineIndex, pageWordStart, pageWordEnd](const Highlight& h) {
+                       return h.spineIndex == spineIndex && h.startWordOffset < pageWordEnd &&
+                              h.endWordOffset > pageWordStart;
+                     }),
+      highlights.end());
+}
+
 void HighlightStore::addHighlight(const Highlight& h) {
   if (highlights.size() >= MAX_HIGHLIGHTS) {
     LOG_ERR("HLS", "Highlight limit reached, cannot add more");

@@ -209,9 +209,19 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+    bool hasPageHighlights = false;
+    if (highlightStore && hlLineWordOffsets.size() >= 2) {
+      const uint32_t pageWordStart = hlLineWordOffsets.front();
+      const uint32_t pageWordEnd = hlLineWordOffsets.back();
+      const auto spineHighlights = highlightStore->getSpineHighlights(static_cast<uint16_t>(currentSpineIndex));
+      hasPageHighlights = std::any_of(spineHighlights.begin(), spineHighlights.end(),
+                                      [pageWordStart, pageWordEnd](const Highlight* h) {
+                                        return h->startWordOffset < pageWordEnd && h->endWordOffset > pageWordStart;
+                                      });
+    }
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), hasPageHighlights),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -395,6 +405,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       hlStartLine = 0;
       highlightMode = HighlightMode::CURSOR;
       requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DELETE_HIGHLIGHT: {
+      if (highlightStore && hlLineWordOffsets.size() >= 2) {
+        highlightStore->removePageHighlights(static_cast<uint16_t>(currentSpineIndex), hlLineWordOffsets.front(),
+                                             hlLineWordOffsets.back());
+        highlightStore->save();
+        requestUpdate();
+      }
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {

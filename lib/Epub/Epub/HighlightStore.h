@@ -10,6 +10,8 @@ class HighlightStore {
   void load();
   void save() const;
   void addHighlight(const Highlight& h);
+  // Removes all highlights whose word range overlaps [pageWordStart, pageWordEnd).
+  void removePageHighlights(uint16_t spineIndex, uint32_t pageWordStart, uint32_t pageWordEnd);
   const std::vector<Highlight>& getHighlights() const { return highlights; }
   // Returns all highlights for a spine item (caller checks word-offset overlap per line).
   std::vector<const Highlight*> getSpineHighlights(uint16_t spineIndex) const;
