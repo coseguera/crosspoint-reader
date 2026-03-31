@@ -216,28 +216,28 @@ void EpubReaderActivity::loop() {
       const uint32_t pageWordStart = hlLineWordOffsets.front();
       const uint32_t pageWordEnd = hlLineWordOffsets.back();
       const auto spineHighlights = highlightStore->getSpineHighlights(static_cast<uint16_t>(currentSpineIndex));
-      hasPageHighlights = std::any_of(spineHighlights.begin(), spineHighlights.end(),
-                                      [pageWordStart, pageWordEnd](const Highlight* h) {
-                                        return h->startWordOffset < pageWordEnd && h->endWordOffset > pageWordStart;
-                                      });
+      hasPageHighlights =
+          std::any_of(spineHighlights.begin(), spineHighlights.end(), [pageWordStart, pageWordEnd](const Highlight* h) {
+            return h->startWordOffset < pageWordEnd && h->endWordOffset > pageWordStart;
+          });
       hasNextHighlight =
           highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd) != nullptr;
       hasPrevHighlight =
           highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart) != nullptr;
     }
-    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty(), hasPageHighlights,
-                               hasNextHighlight, hasPrevHighlight),
-                           [this](const ActivityResult& result) {
-                             // Always apply orientation change even if the menu was cancelled
-                             const auto& menu = std::get<MenuResult>(result.data);
-                             applyOrientation(menu.orientation);
-                             toggleAutoPageTurn(menu.pageTurnOption);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                             }
-                           });
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(
+            renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+            !currentPageFootnotes.empty(), hasPageHighlights, hasNextHighlight, hasPrevHighlight),
+        [this](const ActivityResult& result) {
+          // Always apply orientation change even if the menu was cancelled
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+          toggleAutoPageTurn(menu.pageTurnOption);
+          if (!result.isCancelled) {
+            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+          }
+        });
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -426,8 +426,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::NEXT_HIGHLIGHT: {
       if (highlightStore && hlLineWordOffsets.size() >= 2) {
         const uint32_t pageWordEnd = hlLineWordOffsets.back();
-        const Highlight* h =
-            highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd);
+        const Highlight* h = highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd);
         if (h) {
           if (h->spineIndex == static_cast<uint16_t>(currentSpineIndex) && section) {
             if (const auto page = section->getPageForWordOffset(h->startWordOffset)) {
@@ -449,8 +448,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::PREV_HIGHLIGHT: {
       if (highlightStore && hlLineWordOffsets.size() >= 2) {
         const uint32_t pageWordStart = hlLineWordOffsets.front();
-        const Highlight* h =
-            highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart);
+        const Highlight* h = highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart);
         if (h) {
           if (h->spineIndex == static_cast<uint16_t>(currentSpineIndex) && section) {
             if (const auto page = section->getPageForWordOffset(h->startWordOffset)) {

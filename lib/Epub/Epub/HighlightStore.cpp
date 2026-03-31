@@ -63,13 +63,12 @@ void HighlightStore::save() const {
 
 void HighlightStore::removePageHighlights(const uint16_t spineIndex, const uint32_t pageWordStart,
                                           const uint32_t pageWordEnd) {
-  highlights.erase(
-      std::remove_if(highlights.begin(), highlights.end(),
-                     [spineIndex, pageWordStart, pageWordEnd](const Highlight& h) {
-                       return h.spineIndex == spineIndex && h.startWordOffset < pageWordEnd &&
-                              h.endWordOffset > pageWordStart;
-                     }),
-      highlights.end());
+  highlights.erase(std::remove_if(highlights.begin(), highlights.end(),
+                                  [spineIndex, pageWordStart, pageWordEnd](const Highlight& h) {
+                                    return h.spineIndex == spineIndex && h.startWordOffset < pageWordEnd &&
+                                           h.endWordOffset > pageWordStart;
+                                  }),
+                   highlights.end());
 }
 
 void HighlightStore::addHighlight(const Highlight& h) {
@@ -80,12 +79,11 @@ void HighlightStore::addHighlight(const Highlight& h) {
   highlights.push_back(h);
 }
 
-const Highlight* HighlightStore::findNextHighlight(const uint16_t currentSpineIndex,
-                                                    const uint32_t pageWordEnd) const {
+const Highlight* HighlightStore::findNextHighlight(const uint16_t currentSpineIndex, const uint32_t pageWordEnd) const {
   const Highlight* best = nullptr;
   for (const auto& h : highlights) {
-    const bool isAfter = (h.spineIndex > currentSpineIndex) ||
-                         (h.spineIndex == currentSpineIndex && h.startWordOffset >= pageWordEnd);
+    const bool isAfter =
+        (h.spineIndex > currentSpineIndex) || (h.spineIndex == currentSpineIndex && h.startWordOffset >= pageWordEnd);
     if (!isAfter) {
       continue;
     }
@@ -98,11 +96,11 @@ const Highlight* HighlightStore::findNextHighlight(const uint16_t currentSpineIn
 }
 
 const Highlight* HighlightStore::findPrevHighlight(const uint16_t currentSpineIndex,
-                                                    const uint32_t pageWordStart) const {
+                                                   const uint32_t pageWordStart) const {
   const Highlight* best = nullptr;
   for (const auto& h : highlights) {
-    const bool isBefore = (h.spineIndex < currentSpineIndex) ||
-                          (h.spineIndex == currentSpineIndex && h.endWordOffset <= pageWordStart);
+    const bool isBefore =
+        (h.spineIndex < currentSpineIndex) || (h.spineIndex == currentSpineIndex && h.endWordOffset <= pageWordStart);
     if (!isBefore) {
       continue;
     }

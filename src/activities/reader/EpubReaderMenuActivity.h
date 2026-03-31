@@ -46,7 +46,7 @@ class EpubReaderMenuActivity final : public Activity {
   };
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasPageHighlights, bool hasNextHighlight,
-                                               bool hasPrevHighlight);
+                                              bool hasPrevHighlight);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;

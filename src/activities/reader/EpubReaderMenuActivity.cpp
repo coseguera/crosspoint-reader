@@ -21,9 +21,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                      bool hasPageHighlights,
-                                                                                      bool hasNextHighlight,
-                                                                                      bool hasPrevHighlight) {
+                                                                                     bool hasPageHighlights,
+                                                                                     bool hasNextHighlight,
+                                                                                     bool hasPrevHighlight) {
   std::vector<MenuItem> items;
   items.reserve(13);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
