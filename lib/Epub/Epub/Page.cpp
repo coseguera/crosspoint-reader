@@ -55,6 +55,7 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, co
 }
 
 bool Page::serialize(FsFile& file) const {
+  serialization::writePod(file, firstWordOffset);
   const uint16_t count = elements.size();
   serialization::writePod(file, count);
 
@@ -85,6 +86,7 @@ bool Page::serialize(FsFile& file) const {
 std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
 
+  serialization::readPod(file, page->firstWordOffset);
   uint16_t count;
   serialization::readPod(file, count);
 

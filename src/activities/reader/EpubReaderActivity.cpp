@@ -1,5 +1,6 @@
 #include "EpubReaderActivity.h"
 
+#include <Epub/Highlight.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
@@ -60,6 +61,9 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
 
+  highlightStore = std::make_unique<HighlightStore>(epub->getCachePath());
+  highlightStore->load();
+
   FsFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
@@ -108,6 +112,8 @@ void EpubReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+  highlightMode = HighlightMode::NONE;
+  highlightStore.reset();
   section.reset();
   epub.reset();
 }
@@ -117,6 +123,56 @@ void EpubReaderActivity::loop() {
     // Should never happen
     finish();
     return;
+  }
+
+  // Highlight mode captures all input until confirmed or cancelled.
+  if (highlightMode != HighlightMode::NONE) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      highlightMode = HighlightMode::NONE;
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+        mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
+      if (hlCursorLine > 0) {
+        hlCursorLine--;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+        mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
+      if (hlLineCnt > 0 && hlCursorLine < hlLineCnt - 1) {
+        hlCursorLine++;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      if (highlightMode == HighlightMode::CURSOR) {
+        hlStartLine = hlCursorLine;
+        highlightMode = HighlightMode::SELECTING;
+        requestUpdate();
+      } else {
+        // SELECTING: save highlight using stable word offsets and exit mode
+        if (highlightStore && hlLineCnt > 0 && static_cast<int>(hlLineWordOffsets.size()) >= hlLineCnt + 1) {
+          const int startLine = std::min(hlStartLine, hlCursorLine);
+          const int endLine = std::max(hlStartLine, hlCursorLine);
+          const int clampedStart = std::min(startLine, hlLineCnt - 1);
+          const int clampedEnd = std::min(endLine, hlLineCnt - 1);
+          Highlight h;
+          h.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+          h.startWordOffset = hlLineWordOffsets[clampedStart];
+          h.endWordOffset = hlLineWordOffsets[clampedEnd + 1];
+          highlightStore->addHighlight(h);
+          highlightStore->save();
+        }
+        highlightMode = HighlightMode::NONE;
+        requestUpdate();
+      }
+      return;
+    }
+    return;  // Consume all other inputs while in highlight mode
   }
 
   if (automaticPageTurnActive) {
@@ -155,18 +211,35 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-    startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                               renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
-                           [this](const ActivityResult& result) {
-                             // Always apply orientation change even if the menu was cancelled
-                             const auto& menu = std::get<MenuResult>(result.data);
-                             applyOrientation(menu.orientation);
-                             toggleAutoPageTurn(menu.pageTurnOption);
-                             if (!result.isCancelled) {
-                               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                             }
-                           });
+    bool hasPageHighlights = false;
+    bool hasNextHighlight = false;
+    bool hasPrevHighlight = false;
+    if (highlightStore && hlLineWordOffsets.size() >= 2) {
+      const uint32_t pageWordStart = hlLineWordOffsets.front();
+      const uint32_t pageWordEnd = hlLineWordOffsets.back();
+      const auto spineHighlights = highlightStore->getSpineHighlights(static_cast<uint16_t>(currentSpineIndex));
+      hasPageHighlights =
+          std::any_of(spineHighlights.begin(), spineHighlights.end(), [pageWordStart, pageWordEnd](const Highlight* h) {
+            return h->startWordOffset < pageWordEnd && h->endWordOffset > pageWordStart;
+          });
+      hasNextHighlight =
+          highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd) != nullptr;
+      hasPrevHighlight =
+          highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart) != nullptr;
+    }
+    startActivityForResult(
+        std::make_unique<EpubReaderMenuActivity>(
+            renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+            !currentPageFootnotes.empty(), hasPageHighlights, hasNextHighlight, hasPrevHighlight),
+        [this](const ActivityResult& result) {
+          // Always apply orientation change even if the menu was cancelled
+          const auto& menu = std::get<MenuResult>(result.data);
+          applyOrientation(menu.orientation);
+          toggleAutoPageTurn(menu.pageTurnOption);
+          if (!result.isCancelled) {
+            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+          }
+        });
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -334,6 +407,66 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                }
                                requestUpdate();
                              });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHT: {
+      hlCursorLine = 0;
+      hlStartLine = 0;
+      highlightMode = HighlightMode::CURSOR;
+      requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DELETE_HIGHLIGHT: {
+      if (highlightStore && hlLineWordOffsets.size() >= 2) {
+        highlightStore->removePageHighlights(static_cast<uint16_t>(currentSpineIndex), hlLineWordOffsets.front(),
+                                             hlLineWordOffsets.back());
+        highlightStore->save();
+        requestUpdate();
+      }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::NEXT_HIGHLIGHT: {
+      if (highlightStore && hlLineWordOffsets.size() >= 2) {
+        const uint32_t pageWordEnd = hlLineWordOffsets.back();
+        const Highlight* h = highlightStore->findNextHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordEnd);
+        if (h) {
+          if (h->spineIndex == static_cast<uint16_t>(currentSpineIndex) && section) {
+            if (const auto page = section->getPageForWordOffset(h->startWordOffset)) {
+              section->currentPage = *page;
+              requestUpdate();
+            }
+          } else {
+            RenderLock lock(*this);
+            currentSpineIndex = h->spineIndex;
+            nextPageNumber = 0;
+            pendingHighlightWordOffset = h->startWordOffset;
+            pendingHighlightJump = true;
+            section.reset();
+          }
+        }
+      }
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::PREV_HIGHLIGHT: {
+      if (highlightStore && hlLineWordOffsets.size() >= 2) {
+        const uint32_t pageWordStart = hlLineWordOffsets.front();
+        const Highlight* h = highlightStore->findPrevHighlight(static_cast<uint16_t>(currentSpineIndex), pageWordStart);
+        if (h) {
+          if (h->spineIndex == static_cast<uint16_t>(currentSpineIndex) && section) {
+            if (const auto page = section->getPageForWordOffset(h->startWordOffset)) {
+              section->currentPage = *page;
+              requestUpdate();
+            }
+          } else {
+            RenderLock lock(*this);
+            currentSpineIndex = h->spineIndex;
+            nextPageNumber = 0;
+            pendingHighlightWordOffset = h->startWordOffset;
+            pendingHighlightJump = true;
+            section.reset();
+          }
+        }
+      }
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
@@ -676,6 +809,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       section->currentPage = newPage;
       pendingPercentJump = false;
     }
+
+    if (pendingHighlightJump) {
+      if (const auto page = section->getPageForWordOffset(pendingHighlightWordOffset)) {
+        section->currentPage = *page;
+      }
+      pendingHighlightJump = false;
+    }
   }
 
   renderer.clearScreen();
@@ -782,6 +922,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  renderHighlightOverlay(*page, orientedMarginLeft, orientedMarginTop, orientedMarginRight);
   renderStatusBar();
   const auto tBwRender = millis();
 
@@ -853,6 +994,74 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
             "Page render: prewarm=%lums bw_render=%lums display=%lums bw_store=%lums bw_restore=%lums total=%lums",
             tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, tBwRestore - tBwStore,
             tEnd - t0);
+  }
+}
+
+void EpubReaderActivity::renderHighlightOverlay(const Page& page, const int marginLeft, const int marginTop,
+                                                const int marginRight) {
+  const int fontId = SETTINGS.getReaderFontId();
+  const int lineHeight = renderer.getLineHeight(fontId);
+  const int contentWidth = renderer.getScreenWidth() - marginLeft - marginRight;
+
+  // Build list of element indices that are text lines
+  std::vector<int> lineIndices;
+  for (int i = 0; i < static_cast<int>(page.elements.size()); i++) {
+    if (page.elements[i]->getTag() == TAG_PageLine) {
+      lineIndices.push_back(i);
+    }
+  }
+  hlLineCnt = static_cast<int>(lineIndices.size());
+
+  // Build per-line word offsets from chapter start (stable across layout changes).
+  // hlLineWordOffsets[li]   = words before line li
+  // hlLineWordOffsets[li+1] = words before line (li+1)  [exclusive end of line li]
+  hlLineWordOffsets.clear();
+  hlLineWordOffsets.reserve(hlLineCnt + 1);
+  uint32_t wordCount = page.firstWordOffset;
+  for (int li = 0; li < hlLineCnt; li++) {
+    hlLineWordOffsets.push_back(wordCount);
+    const auto& pl = static_cast<const PageLine&>(*page.elements[lineIndices[li]]);
+    wordCount += static_cast<uint32_t>(pl.getBlock()->wordCount());
+  }
+  hlLineWordOffsets.push_back(wordCount);  // sentinel
+
+  // Draw persistent highlights: a solid bar on the left edge of each highlighted line.
+  // A line is highlighted when its word range overlaps the stored highlight interval.
+  if (hlLineCnt > 0 && highlightStore) {
+    const auto spineHighlights = highlightStore->getSpineHighlights(static_cast<uint16_t>(currentSpineIndex));
+    for (int li = 0; li < hlLineCnt; li++) {
+      const uint32_t lineStart = hlLineWordOffsets[li];
+      const uint32_t lineEnd = hlLineWordOffsets[li + 1];
+      const bool isHighlighted =
+          std::any_of(spineHighlights.begin(), spineHighlights.end(), [lineStart, lineEnd](const Highlight* h) {
+            return lineStart < h->endWordOffset && lineEnd > h->startWordOffset;
+          });
+      if (isHighlighted) {
+        const int y = page.elements[lineIndices[li]]->yPos + marginTop;
+        renderer.fillRect(marginLeft, y, 3, lineHeight, true);
+      }
+    }
+  }
+
+  if (highlightMode == HighlightMode::NONE || lineIndices.empty()) return;
+
+  const int cursorLine = std::min(hlCursorLine, hlLineCnt - 1);
+
+  if (highlightMode == HighlightMode::CURSOR) {
+    // Outline the cursor line
+    const int y = page.elements[lineIndices[cursorLine]]->yPos + marginTop;
+    renderer.drawRect(marginLeft, y, contentWidth, lineHeight, true);
+  } else {
+    // SELECTING: outline each line in the selected range, mark the cursor line
+    const int startLine = std::min(hlStartLine, cursorLine);
+    const int endLine = std::max(hlStartLine, cursorLine);
+    for (int li = startLine; li <= endLine && li < hlLineCnt; li++) {
+      const int y = page.elements[lineIndices[li]]->yPos + marginTop;
+      renderer.drawRect(marginLeft, y, contentWidth, lineHeight, true);
+    }
+    // Filled bar on the cursor line to indicate the active end of the selection
+    const int cy = page.elements[lineIndices[cursorLine]]->yPos + marginTop;
+    renderer.fillRect(marginLeft, cy, 3, lineHeight, true);
   }
 }
 
